@@ -68,13 +68,20 @@ export const DashboardPage: React.FC = () => {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const taskList: Task[] = snapshot.docs.map((docSnap) => {
         const data = docSnap.data();
+        const linkId = data.linkId || 'link_1';
+        const linkCode = userData.userLinks.find((link) => link.id === linkId)?.code;
+        if (linkCode && data.linkCode !== linkCode) {
+          void updateDoc(doc(db, 'users', userData.uid, 'tasks', docSnap.id), { linkCode })
+            .catch((error) => console.error('Erro ao atualizar o código do link da tarefa:', error));
+        }
+
         return {
           id: docSnap.id,
           title: data.title || '',
           date: data.date || todayFormatted,
           color: data.color || '#3B82F6',
           icon: data.icon || '📝',
-          linkId: data.linkId || 'link_1',
+          linkId,
           linkName: data.linkName || 'Link 1',
           status: data.status || (data.completed ? 'Concluida' : 'Aguardando'),
           createdAt: data.createdAt,
@@ -94,7 +101,7 @@ export const DashboardPage: React.FC = () => {
     });
 
     return () => unsubscribe();
-  }, [userData?.uid]);
+  }, [userData?.uid, userData?.userLinks]);
 
   const taskDatesSet = useMemo(() => {
     return new Set(tasks.map((t) => t.date));
@@ -122,6 +129,12 @@ export const DashboardPage: React.FC = () => {
       return;
     }
 
+    const assignedLink = userData.userLinks.find((link) => link.id === taskData.linkId);
+    if (!assignedLink) {
+      alert('O link selecionado não existe. Atualize a página e tente novamente.');
+      return;
+    }
+
     const isoDate = new Date().toISOString();
 
     try {
@@ -133,6 +146,7 @@ export const DashboardPage: React.FC = () => {
           color: taskData.color,
           icon: taskData.icon,
           linkId: taskData.linkId,
+          linkCode: assignedLink.code,
           linkName: taskData.linkName,
           updatedAt: isoDate,
         });
@@ -161,6 +175,7 @@ export const DashboardPage: React.FC = () => {
             color: taskData.color,
             icon: taskData.icon,
             linkId: taskData.linkId,
+            linkCode: assignedLink.code,
             linkName: taskData.linkName,
             status: 'Aguardando',
             completed: false,

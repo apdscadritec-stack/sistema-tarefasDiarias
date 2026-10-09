@@ -9,7 +9,7 @@ import {
   where
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { useAuth, UserData, UserLink } from '../context/AuthContext';
+import { LinkAccessData, useAuth, UserLink } from '../context/AuthContext';
 
 interface Task {
   id: string;
@@ -28,7 +28,7 @@ export const SharedLinkPage: React.FC = () => {
   const { getTaskOwnerByLinkCode, toggleDeviceBlock } = useAuth();
 
   const [loading, setLoading] = useState(true);
-  const [ownerData, setOwnerData] = useState<UserData | null>(null);
+  const [ownerData, setOwnerData] = useState<LinkAccessData | null>(null);
   const [targetLink, setTargetLink] = useState<UserLink | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [errorMsg, setErrorMsg] = useState('');
@@ -38,7 +38,7 @@ export const SharedLinkPage: React.FC = () => {
     if (!code) return;
 
     let unsubscribeTasks: (() => void) | null = null;
-    let unsubscribeOwner: (() => void) | null = null;
+    let unsubscribeLinkAccess: (() => void) | null = null;
 
     const fetchOwnerAndTasks = async () => {
       setLoading(true);
@@ -52,25 +52,49 @@ export const SharedLinkPage: React.FC = () => {
           return;
         }
 
-        setOwnerData(result.userData);
+        setOwnerData(result);
         setTargetLink(result.targetLink);
 
-        // Listen for user profile & targetLink changes (including device block state)
-        const userDocRef = doc(db, 'users', result.userData.uid);
-        unsubscribeOwner = onSnapshot(userDocRef, (userSnap) => {
-          if (userSnap.exists()) {
-            const data = userSnap.data() as UserData;
-            setOwnerData(data);
-            const updatedLink = (data.userLinks || []).find((l) => l.code === code);
-            if (updatedLink) {
-              setTargetLink(updatedLink);
-            }
+        const linkAccessRef = doc(db, 'linkAccess', code);
+        unsubscribeLinkAccess = onSnapshot(linkAccessRef, (linkSnap) => {
+          if (!linkSnap.exists()) {
+            setErrorMsg('Link não encontrado ou expirado.');
+            setLoading(false);
+            return;
           }
+          const data = linkSnap.data();
+          if (data.uid !== result.uid || data.linkId !== result.targetLink.id) {
+            setErrorMsg('Os dados deste link são inválidos.');
+            setLoading(false);
+            return;
+          }
+          const updatedLink: UserLink = {
+            id: data.linkId,
+            code: code,
+            name: typeof data.linkName === 'string' ? data.linkName : 'Link',
+            assignedPersonName: typeof data.assignedPersonName === 'string' ? data.assignedPersonName : '',
+            logo: typeof data.logo === 'string' ? data.logo : '🏢',
+            isDeviceBlocked: data.isDeviceBlocked === true,
+          };
+          setOwnerData({
+            uid: data.uid,
+            ownerName: typeof data.ownerName === 'string' ? data.ownerName : 'Usuário',
+            targetLink: updatedLink,
+          });
+          setTargetLink(updatedLink);
+        }, (error) => {
+          console.error('Erro ao acompanhar o link compartilhado:', error);
+          setErrorMsg('Sem permissão para acessar este link. Verifique as regras do Firestore.');
+          setLoading(false);
         });
 
         // Listen for tasks assigned to this linkId
-        const tasksRef = collection(db, 'users', result.userData.uid, 'tasks');
-        const q = query(tasksRef, where('linkId', '==', result.targetLink.id));
+        const tasksRef = collection(db, 'users', result.uid, 'tasks');
+        const q = query(
+          tasksRef,
+          where('linkCode', '==', code),
+          where('linkId', '==', result.targetLink.id)
+        );
 
         unsubscribeTasks = onSnapshot(q, (snapshot) => {
           const loadedTasks: Task[] = snapshot.docs.map((docSnap) => ({
@@ -85,10 +109,18 @@ export const SharedLinkPage: React.FC = () => {
           }));
           setTasks(loadedTasks);
           setLoading(false);
+        }, (error) => {
+          console.error('Erro ao acompanhar tarefas do link:', error);
+          setErrorMsg('Sem permissão para acessar as tarefas deste link. Verifique as regras do Firestore.');
+          setLoading(false);
         });
       } catch (err) {
         console.error('Erro ao carregar link:', err);
-        setErrorMsg('Erro ao conectar ao servidor.');
+        setErrorMsg(
+          err instanceof Error && 'code' in err && err.code === 'permission-denied'
+            ? 'Sem permissão para acessar este link. Publique as regras do Firestore incluídas no projeto.'
+            : 'Erro ao conectar ao servidor.'
+        );
         setLoading(false);
       }
     };
@@ -97,7 +129,7 @@ export const SharedLinkPage: React.FC = () => {
 
     return () => {
       if (unsubscribeTasks) unsubscribeTasks();
-      if (unsubscribeOwner) unsubscribeOwner();
+      if (unsubscribeLinkAccess) unsubscribeLinkAccess();
     };
   }, [code]);
 
@@ -142,7 +174,7 @@ export const SharedLinkPage: React.FC = () => {
 
     setIsBlockingAction(true);
     try {
-      await toggleDeviceBlock(ownerData.uid, targetLink.id, true);
+      await toggleDeviceBlock(targetLink.code, true);
       alert('Dispositivo Bloqueado 🔒\nO celular foi bloqueado com sucesso.');
     } catch (err) {
       console.error('Erro ao bloquear dispositivo:', err);
@@ -221,7 +253,7 @@ export const SharedLinkPage: React.FC = () => {
                   👤 Atribuído a: {targetLink.assignedPersonName}
                 </p>
               ) : (
-                <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">Cadastro: {ownerData.name}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">Cadastro: {ownerData.ownerName}</p>
               )}
             </div>
           </div>

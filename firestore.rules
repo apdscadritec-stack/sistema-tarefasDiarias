@@ -1,0 +1,63 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    function linkAccessPath(code) {
+      return /databases/$(database)/documents/linkAccess/$(code);
+    }
+
+    function isTaskAssignedToLink(userId, task) {
+      return task.linkCode is string
+        && exists(linkAccessPath(task.linkCode))
+        && get(linkAccessPath(task.linkCode)).data.uid == userId
+        && get(linkAccessPath(task.linkCode)).data.linkId == task.linkId
+        && get(linkAccessPath(task.linkCode)).data.code == task.linkCode;
+    }
+
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+
+      match /people/{personId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /tasks/{taskId} {
+        allow read: if isOwner(userId) || isTaskAssignedToLink(userId, resource.data);
+        allow create, delete: if isOwner(userId);
+        allow update: if isOwner(userId)
+          || (
+            isTaskAssignedToLink(userId, resource.data)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'completed'])
+            && (
+              (request.resource.data.status == 'Concluida' && request.resource.data.completed == true)
+              || (request.resource.data.status == 'Aguardando' && request.resource.data.completed == false)
+            )
+          );
+      }
+    }
+
+    match /linkAccess/{code} {
+      allow get: if true;
+      allow list: if false;
+      allow create: if isOwner(request.resource.data.uid)
+        && request.resource.data.code == code;
+      allow update: if (
+          isOwner(resource.data.uid)
+          && request.resource.data.uid == resource.data.uid
+          && request.resource.data.code == resource.data.code
+        )
+        || (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isDeviceBlocked'])
+          && request.resource.data.isDeviceBlocked == true
+          && request.resource.data.uid == resource.data.uid
+          && request.resource.data.code == resource.data.code
+          && request.resource.data.linkId == resource.data.linkId
+        );
+      allow delete: if isOwner(resource.data.uid);
+    }
+  }
+}

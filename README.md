@@ -1,77 +1,37 @@
-# Welcome to your Expo app 👋
+# Tarefas Diárias
 
 ## Firebase e Firestore
 
-O aplicativo usa o Firebase Authentication e o Firestore por meio do Firebase JavaScript SDK.
+O aplicativo React Web usa Firebase Authentication e Cloud Firestore por meio do Firebase JavaScript SDK.
 
 Estrutura dos dados:
 
-- `users/{uid}`: perfil, assinatura e os quatro links do usuário.
+- `users/{uid}`: perfil, assinatura e os links do usuário.
 - `users/{uid}/people/{personId}`: pessoas cadastradas.
-- `users/{uid}/tasks/{taskId}`: tarefas, incluindo data, status, cor, ícone e link executor.
+- `users/{uid}/tasks/{taskId}`: tarefas, incluindo status e código do link executor.
+- `linkAccess/{code}`: metadados mínimos para resolver links compartilhados sem consultar a coleção inteira de usuários.
 
-Ao registrar uma conta, o documento `users/{uid}` é criado automaticamente. As telas principal e de link compartilhado escutam as coleções de tarefas em tempo real com `onSnapshot`.
+Ao entrar no painel, o documento do usuário é criado quando necessário, os links públicos são sincronizados e tarefas antigas recebem o código do link correspondente. O link compartilhado acessa somente tarefas atribuídas ao seu código e pode atualizar apenas o status dessas tarefas.
 
-Para habilitar o banco no projeto Firebase:
+### Configuração e regras
 
-1. Abra o projeto `sistema-tarefasdiarias` no [Firebase Console](https://console.firebase.google.com/).
-2. Em **Build > Firestore Database**, clique em **Create database** e escolha a região.
-3. Em **Build > Authentication > Sign-in method**, habilite **Email/Password**.
-4. Configure as regras do Firestore antes de publicar o aplicativo. A regra de produção deve permitir que cada usuário acesse apenas `users/{uid}` e suas subcoleções. O fluxo de links compartilhados precisa de uma regra específica ou de uma função backend para não expor todos os perfis.
-
-As credenciais podem ser fornecidas pelas variáveis `EXPO_PUBLIC_FIREBASE_*` usadas em `src/config/firebase.ts`. Não coloque chaves privadas ou `STRIPE_SECRET_KEY` no código do aplicativo.
-
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
-
-## Get started
-
-1. Install dependencies
+1. Habilite **Email/Password** em **Firebase Console > Authentication > Sign-in method** e crie o banco em **Firestore Database**.
+2. Publique as regras deste repositório no projeto Firebase correto:
 
    ```bash
-   npm install
+   firebase deploy --only firestore:rules --project SEU_PROJECT_ID
    ```
 
-2. Start the app
+3. Configure as variáveis `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_APP_ID` e `VITE_STRIPE_PUBLIC` no ambiente local e na hospedagem.
+4. Depois de publicar as regras, entre no painel com a conta proprietária para sincronizar os links e atualizar tarefas antigas.
 
-   ```bash
-   npx expo start
-   ```
+Não disponibilize regras que permitam leitura pública de `users` ou de todas as tarefas. Não coloque chaves privadas ou `STRIPE_SECRET_KEY` no código do aplicativo.
 
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Desenvolvimento
 
 ```bash
-npm run reset-project
+npm install
+npm run dev
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-### Other setup steps
-
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Valide uma compilação de produção com `npm run build`.

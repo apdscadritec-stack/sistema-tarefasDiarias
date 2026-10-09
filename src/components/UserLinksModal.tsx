@@ -56,7 +56,7 @@ export const UserLinksModal: React.FC<UserLinksModalProps> = ({
     if (!userData?.uid) return;
     const nextState = !link.isDeviceBlocked;
     try {
-      await toggleDeviceBlock(userData.uid, link.id, nextState);
+      await toggleDeviceBlock(link.code, nextState);
     } catch (err) {
       console.error('Erro ao alternar status do bloqueio:', err);
       alert('Não foi possível alterar o status do bloqueio.');

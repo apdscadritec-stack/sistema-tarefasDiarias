@@ -73,7 +73,11 @@ export const LoginPage: React.FC = () => {
       navigate(`/link/${cleanCode}`);
     } catch (error) {
       console.error('Erro ao acessar por código de link:', error);
-      setErrorMessage('Erro ao conectar ao servidor do link.');
+      setErrorMessage(
+        error instanceof Error && 'code' in error && error.code === 'permission-denied'
+          ? 'O Firebase bloqueou este link. Publique as regras do Firestore incluídas no projeto.'
+          : 'Erro ao conectar ao servidor do link.'
+      );
     } finally {
       setIsSubmitting(false);
     }

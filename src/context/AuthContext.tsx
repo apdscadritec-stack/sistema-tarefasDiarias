@@ -12,7 +12,6 @@ import {
   deleteDoc,
   doc,
   getDoc,
-  getDocs,
   onSnapshot,
   orderBy,
   query,
@@ -52,6 +51,12 @@ export interface UserData {
   userLinks: UserLink[];
 }
 
+export interface LinkAccessData {
+  uid: string;
+  ownerName: string;
+  targetLink: UserLink;
+}
+
 interface AuthContextType {
   user: User | null;
   userData: UserData | null;
@@ -71,8 +76,8 @@ interface AuthContextType {
   updatePerson: (personId: string, fullName: string, birthDate: string, gender: 'Masculino' | 'Feminino') => Promise<void>;
   deletePerson: (personId: string) => Promise<void>;
   updateLinkDetails: (linkId: string, name: string, assignedPersonId: string, assignedPersonName: string, logo: string) => Promise<void>;
-  toggleDeviceBlock: (targetUid: string, linkId: string, blockState: boolean) => Promise<void>;
-  getTaskOwnerByLinkCode: (linkCode: string) => Promise<{ userData: UserData; targetLink: UserLink } | null>;
+  toggleDeviceBlock: (linkCode: string, blockState: boolean) => Promise<void>;
+  getTaskOwnerByLinkCode: (linkCode: string) => Promise<LinkAccessData | null>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -85,6 +90,25 @@ export const generateDefaultLinks = (uid: string): UserLink[] => {
     { id: 'link_3', name: 'Link 3 (Dispositivo 3)', code: `${shortUid}_l3`, logo: '👩‍💼', isDeviceBlocked: false },
     { id: 'link_4', name: 'Link 4 (Dispositivo 4)', code: `${shortUid}_l4`, logo: '😎', isDeviceBlocked: false },
   ];
+};
+
+const syncLinkAccessDocuments = async (userData: UserData) => {
+  await Promise.all(userData.userLinks.map(async (link) => {
+    const linkDocRef = doc(db, 'linkAccess', link.code);
+    const existingLink = await getDoc(linkDocRef);
+    await setDoc(linkDocRef, {
+      uid: userData.uid,
+      ownerName: userData.name || 'Usuário',
+      code: link.code,
+      linkId: link.id,
+      linkName: link.name,
+      assignedPersonName: link.assignedPersonName || '',
+      logo: link.logo || '🏢',
+      isDeviceBlocked: existingLink.exists()
+        ? existingLink.data().isDeviceBlocked === true
+        : link.isDeviceBlocked === true,
+    });
+  }));
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -117,33 +141,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const userDocRef = doc(db, 'users', user.uid);
 
     const unsubscribeUserSnap = onSnapshot(userDocRef, async (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data() as UserData;
-        if (!data.userLinks || data.userLinks.length === 0) {
-          const links = generateDefaultLinks(user.uid);
-          await updateDoc(userDocRef, { userLinks: links });
-          setUserData({ ...data, userLinks: links });
+      try {
+        let currentUserData: UserData;
+        if (docSnap.exists()) {
+          const data = docSnap.data() as UserData;
+          if (!data.userLinks || data.userLinks.length === 0) {
+            const links = generateDefaultLinks(user.uid);
+            await updateDoc(userDocRef, { userLinks: links });
+            currentUserData = { ...data, userLinks: links };
+          } else {
+            currentUserData = data;
+          }
         } else {
-          setUserData(data);
-        }
-      } else {
-        const now = new Date();
-        const trialEnds = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-        const links = generateDefaultLinks(user.uid);
+          const now = new Date();
+          const trialEnds = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+          const links = generateDefaultLinks(user.uid);
 
-        const newUserData: UserData = {
-          uid: user.uid,
-          email: user.email || '',
-          name: user.displayName || 'Usuário',
-          createdAt: now.toISOString(),
-          trialEndsAt: trialEnds.toISOString(),
-          isPaid: false,
-          paidAt: null,
-          userLinks: links,
-        };
-        await setDoc(userDocRef, newUserData);
-        setUserData(newUserData);
+          currentUserData = {
+            uid: user.uid,
+            email: user.email || '',
+            name: user.displayName || 'Usuário',
+            createdAt: now.toISOString(),
+            trialEndsAt: trialEnds.toISOString(),
+            isPaid: false,
+            paidAt: null,
+            userLinks: links,
+          };
+          await setDoc(userDocRef, currentUserData);
+        }
+
+        await syncLinkAccessDocuments(currentUserData);
+        setUserData(currentUserData);
+        setSubscriptionLoading(false);
+        setLoading(false);
+      } catch (error) {
+        console.error('Erro ao carregar dados e links do usuário:', error);
+        setSubscriptionLoading(false);
+        setLoading(false);
       }
+    }, (error) => {
+      console.error('Erro ao acessar o perfil do usuário:', error);
       setSubscriptionLoading(false);
       setLoading(false);
     });
@@ -167,6 +204,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       unsubscribePeopleSnap();
     };
   }, [user]);
+
+  const linkAccessCodes = userData?.userLinks.map((link) => link.code).join('|') || '';
+
+  useEffect(() => {
+    if (!userData || !linkAccessCodes) return;
+
+    const unsubscribers = userData.userLinks.map((link) =>
+      onSnapshot(doc(db, 'linkAccess', link.code), (linkSnap) => {
+        if (!linkSnap.exists()) return;
+        const isDeviceBlocked = linkSnap.data().isDeviceBlocked === true;
+        setUserData((currentData) => {
+          if (!currentData) return currentData;
+          const currentLink = currentData.userLinks.find((item) => item.code === link.code);
+          if (!currentLink || currentLink.isDeviceBlocked === isDeviceBlocked) return currentData;
+          return {
+            ...currentData,
+            userLinks: currentData.userLinks.map((item) =>
+              item.code === link.code ? { ...item, isDeviceBlocked } : item
+            ),
+          };
+        });
+      }, (error) => {
+        console.error('Erro ao acompanhar o status do link:', error);
+      })
+    );
+
+    return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
+  }, [userData?.uid, linkAccessCodes]);
 
   const isPaid = userData?.isPaid ?? false;
 
@@ -297,33 +362,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await updateDoc(userDocRef, { userLinks: updatedLinks });
   };
 
-  const toggleDeviceBlock = async (targetUid: string, linkId: string, blockState: boolean) => {
-    const userDocRef = doc(db, 'users', targetUid);
-    const docSnap = await getDoc(userDocRef);
-    if (!docSnap.exists()) return;
-
-    const data = docSnap.data() as UserData;
-    const updatedLinks = (data.userLinks || []).map((l) =>
-      l.id === linkId ? { ...l, isDeviceBlocked: blockState } : l
-    );
-
-    await updateDoc(userDocRef, { userLinks: updatedLinks });
+  const toggleDeviceBlock = async (linkCode: string, blockState: boolean) => {
+    await updateDoc(doc(db, 'linkAccess', linkCode), { isDeviceBlocked: blockState });
+    setUserData((currentData) => {
+      if (!currentData) return currentData;
+      return {
+        ...currentData,
+        userLinks: currentData.userLinks.map((link) =>
+          link.code === linkCode ? { ...link, isDeviceBlocked: blockState } : link
+        ),
+      };
+    });
   };
 
   const getTaskOwnerByLinkCode = async (linkCode: string) => {
-    const usersRef = collection(db, 'users');
-    const snapshot = await getDocs(usersRef);
+    const linkAccessSnap = await getDoc(doc(db, 'linkAccess', linkCode));
+    if (!linkAccessSnap.exists()) return null;
 
-    for (const userDoc of snapshot.docs) {
-      const data = userDoc.data() as UserData;
-      if (data.userLinks) {
-        const foundLink = data.userLinks.find((l) => l.code === linkCode);
-        if (foundLink) {
-          return { userData: data, targetLink: foundLink };
-        }
-      }
+    const data = linkAccessSnap.data();
+    if (
+      typeof data.uid !== 'string' ||
+      typeof data.linkId !== 'string' ||
+      data.code !== linkCode
+    ) {
+      throw new Error('O registro do link está inválido.');
     }
-    return null;
+
+    return {
+      uid: data.uid,
+      ownerName: typeof data.ownerName === 'string' ? data.ownerName : 'Usuário',
+      targetLink: {
+        id: data.linkId,
+        code: linkCode,
+        name: typeof data.linkName === 'string' ? data.linkName : 'Link',
+        assignedPersonName: typeof data.assignedPersonName === 'string' ? data.assignedPersonName : '',
+        logo: typeof data.logo === 'string' ? data.logo : '🏢',
+        isDeviceBlocked: data.isDeviceBlocked === true,
+      },
+    };
   };
 
   return (
