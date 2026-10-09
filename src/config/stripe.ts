@@ -1,5 +1,5 @@
 export const STRIPE_PUBLIC =
-  import.meta.env.STRIPE_PUBLIC
+  import.meta.env.VITE_STRIPE_PUBLIC
 
 
 export interface CardDetails {
