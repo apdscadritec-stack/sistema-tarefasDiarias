@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { normalizeLinkCode } from '../utils/linkCode';
 import logoBlack from '../assets/images/logo_black.png';
 import logoWhite from '../assets/images/logo_white.png';
 
@@ -61,7 +62,12 @@ export const LoginPage: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      const cleanCode = linkCode.trim();
+      const cleanCode = normalizeLinkCode(linkCode);
+      if (!cleanCode) {
+        setErrorMessage('Digite um código válido ou cole o link compartilhado completo.');
+        return;
+      }
+
       const result = await getTaskOwnerByLinkCode(cleanCode);
 
       if (!result) {
@@ -70,7 +76,7 @@ export const LoginPage: React.FC = () => {
         return;
       }
 
-      navigate(`/link/${cleanCode}`);
+      navigate(`/link/${encodeURIComponent(cleanCode)}`);
     } catch (error) {
       console.error('Erro ao acessar por código de link:', error);
       setErrorMessage(
@@ -212,7 +218,7 @@ export const LoginPage: React.FC = () => {
                   type="text"
                   className="w-full rounded-xl px-3.5 py-3 text-sm border outline-none focus:ring-2 focus:ring-green-500 transition-all"
                   style={{ backgroundColor: colors.inputBg, color: colors.textPrimary, borderColor: colors.borderColor }}
-                  placeholder="Digite seu código de link (Ex: abc123_l1)"
+                  placeholder="Cole o código ou link compartilhado"
                   value={linkCode}
                   onChange={(e) => setLinkCode(e.target.value)}
                 />
@@ -229,7 +235,7 @@ export const LoginPage: React.FC = () => {
               </button>
 
               <p className="text-xs text-slate-500 dark:text-slate-400 text-center leading-relaxed pt-2">
-                Ao entrar pelo código do link, você acessa diretamente as tarefas atribuídas àquele link neste dispositivo.
+                Cole o código ou o link completo para acessar as tarefas atribuídas a este dispositivo.
               </p>
             </form>
           )}

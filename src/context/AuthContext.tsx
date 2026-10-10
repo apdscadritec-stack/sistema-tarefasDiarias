@@ -20,6 +20,7 @@ import {
 } from 'firebase/firestore';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { auth, db } from '../config/firebase';
+import { normalizeLinkCode } from '../utils/linkCode';
 
 export interface Person {
   id: string;
@@ -385,14 +386,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const getTaskOwnerByLinkCode = async (linkCode: string) => {
-    const linkAccessSnap = await getDoc(doc(db, 'linkAccess', linkCode));
+    const normalizedCode = normalizeLinkCode(linkCode);
+    if (!normalizedCode) return null;
+
+    const linkAccessSnap = await getDoc(doc(db, 'linkAccess', normalizedCode));
     if (!linkAccessSnap.exists()) return null;
 
     const data = linkAccessSnap.data();
     if (
       typeof data.uid !== 'string' ||
       typeof data.linkId !== 'string' ||
-      data.code !== linkCode
+      data.code !== normalizedCode
     ) {
       throw new Error('O registro do link está inválido.');
     }
@@ -402,7 +406,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ownerName: typeof data.ownerName === 'string' ? data.ownerName : 'Usuário',
       targetLink: {
         id: data.linkId,
-        code: linkCode,
+        code: normalizedCode,
         name: typeof data.linkName === 'string' ? data.linkName : 'Link',
         assignedPersonName: typeof data.assignedPersonName === 'string' ? data.assignedPersonName : '',
         logo: typeof data.logo === 'string' ? data.logo : '🏢',
