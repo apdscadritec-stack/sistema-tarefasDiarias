@@ -122,7 +122,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
-      if (!currentUser) {
+      if (currentUser) {
+        setLoading(true);
+        setSubscriptionLoading(true);
+        setUserData(null);
+        setPeople([]);
+      } else {
         setUserData(null);
         setPeople([]);
         setSubscriptionLoading(false);
@@ -170,10 +175,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           await setDoc(userDocRef, currentUserData);
         }
 
-        await syncLinkAccessDocuments(currentUserData);
         setUserData(currentUserData);
         setSubscriptionLoading(false);
         setLoading(false);
+        try {
+          await syncLinkAccessDocuments(currentUserData);
+        } catch (error) {
+          console.error('Erro ao sincronizar links para acesso compartilhado:', error);
+        }
       } catch (error) {
         console.error('Erro ao carregar dados e links do usuário:', error);
         setSubscriptionLoading(false);
