@@ -26,12 +26,15 @@ export const UserLinksModal: React.FC<UserLinksModalProps> = ({
   onUpdateLinkDetails,
   onOpenPeopleModal,
 }) => {
-  const { userData, toggleDeviceBlock } = useAuth();
+  const { userData, sendLinkMessage, toggleDeviceBlock } = useAuth();
   const [editingLinkId, setEditingLinkId] = useState<string | null>(null);
   const [tempName, setTempName] = useState('');
   const [tempPersonId, setTempPersonId] = useState('');
   const [tempLogo, setTempLogo] = useState('🙂');
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [messageDrafts, setMessageDrafts] = useState<Record<string, string>>({});
+  const [sendingCode, setSendingCode] = useState<string | null>(null);
+  const [messageFeedback, setMessageFeedback] = useState<Record<string, string>>({});
 
   if (!visible) return null;
 
@@ -52,14 +55,34 @@ export const UserLinksModal: React.FC<UserLinksModalProps> = ({
     setEditingLinkId(null);
   };
 
-  const handleToggleBlock = async (link: UserLink) => {
+  const handleUnblock = async (link: UserLink) => {
     if (!userData?.uid) return;
-    const nextState = !link.isDeviceBlocked;
     try {
-      await toggleDeviceBlock(link.code, nextState);
+      await toggleDeviceBlock(link.code, false);
     } catch (err) {
-      console.error('Erro ao alternar status do bloqueio:', err);
-      alert('Não foi possível alterar o status do bloqueio.');
+      console.error('Erro ao desbloquear o link:', err);
+      alert('Não foi possível desbloquear o link.');
+    }
+  };
+
+  const handleSendMessage = async (link: UserLink) => {
+    const message = (messageDrafts[link.code] || '').trim();
+    if (!message) {
+      setMessageFeedback((current) => ({ ...current, [link.code]: 'Digite uma mensagem antes de enviar.' }));
+      return;
+    }
+
+    setSendingCode(link.code);
+    setMessageFeedback((current) => ({ ...current, [link.code]: '' }));
+    try {
+      await sendLinkMessage(link.code, message);
+      setMessageDrafts((current) => ({ ...current, [link.code]: '' }));
+      setMessageFeedback((current) => ({ ...current, [link.code]: 'Mensagem enviada para o link.' }));
+    } catch (error) {
+      console.error('Erro ao enviar mensagem para o link:', error);
+      setMessageFeedback((current) => ({ ...current, [link.code]: 'Não foi possível enviar a mensagem.' }));
+    } finally {
+      setSendingCode(null);
     }
   };
 
@@ -88,7 +111,7 @@ export const UserLinksModal: React.FC<UserLinksModalProps> = ({
         </div>
 
         <p className="text-xs text-slate-500 dark:text-slate-400 mb-3.5 leading-relaxed">
-          Atribua cada link a um nome cadastrado, escolha uma logo e controle o bloqueio de celular.
+          Atribua cada link a uma pessoa e envie uma mensagem que aparecerá no link antes das notificações das tarefas.
         </p>
 
         <div className="space-y-3">
@@ -239,6 +262,37 @@ export const UserLinksModal: React.FC<UserLinksModalProps> = ({
                   </p>
                 </div>
 
+                <div className="mb-2.5">
+                  <label
+                    htmlFor={`link-message-${link.code}`}
+                    className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1"
+                  >
+                    Mensagem para este link
+                  </label>
+                  <textarea
+                    id={`link-message-${link.code}`}
+                    className="w-full min-h-16 resize-y bg-white dark:bg-slate-800 rounded-xl px-2.5 py-2 text-sm border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-100 outline-none focus:border-blue-600"
+                    value={messageDrafts[link.code] || ''}
+                    onChange={(event) => setMessageDrafts((current) => ({
+                      ...current,
+                      [link.code]: event.target.value,
+                    }))}
+                    placeholder="Digite uma mensagem para aparecer no link"
+                  />
+                  {messageFeedback[link.code] ? (
+                    <p
+                      role="status"
+                      className={`mt-1 text-xs ${
+                        messageFeedback[link.code].startsWith('Não foi') || messageFeedback[link.code].startsWith('Digite')
+                          ? 'text-red-600 dark:text-red-400'
+                          : 'text-emerald-700 dark:text-emerald-400'
+                      }`}
+                    >
+                      {messageFeedback[link.code]}
+                    </p>
+                  ) : null}
+                </div>
+
                 <div className="flex gap-2">
                   <button
                     type="button"
@@ -252,14 +306,22 @@ export const UserLinksModal: React.FC<UserLinksModalProps> = ({
 
                   <button
                     type="button"
-                    className={`flex-1 py-2.5 rounded-xl text-white font-bold text-xs transition-all shadow-sm ${
-                      isBlocked ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'
-                    }`}
-                    onClick={() => handleToggleBlock(link)}
+                    className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold text-xs transition-all shadow-sm"
+                    onClick={() => handleSendMessage(link)}
+                    disabled={sendingCode === link.code}
                   >
-                    {isBlocked ? '🔓 Desbloquear' : '🔒 Travar'}
+                    {sendingCode === link.code ? 'Enviando...' : 'Enviar'}
                   </button>
                 </div>
+                {isBlocked ? (
+                  <button
+                    type="button"
+                    className="mt-2 w-full rounded-xl bg-green-600 hover:bg-green-700 py-2.5 text-white font-bold text-xs transition-all shadow-sm"
+                    onClick={() => handleUnblock(link)}
+                  >
+                    🔓 Desbloquear acesso ao link
+                  </button>
+                ) : null}
               </div>
             );
           })}

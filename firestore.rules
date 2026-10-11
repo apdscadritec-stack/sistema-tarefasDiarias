@@ -15,7 +15,8 @@ service cloud.firestore {
         && exists(linkAccessPath(task.linkCode))
         && get(linkAccessPath(task.linkCode)).data.uid == userId
         && get(linkAccessPath(task.linkCode)).data.linkId == task.linkId
-        && get(linkAccessPath(task.linkCode)).data.code == task.linkCode;
+        && get(linkAccessPath(task.linkCode)).data.code == task.linkCode
+        && get(linkAccessPath(task.linkCode)).data.isDeviceBlocked != true;
     }
 
     match /users/{userId} {

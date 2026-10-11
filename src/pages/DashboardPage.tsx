@@ -1,4 +1,3 @@
-import React, { useEffect, useMemo, useState } from 'react';
 import {
   addDoc,
   collection,
@@ -8,6 +7,7 @@ import {
   query,
   updateDoc
 } from 'firebase/firestore';
+import React, { useEffect, useMemo, useState } from 'react';
 import { CalendarView } from '../components/CalendarView';
 import { PeopleModal } from '../components/PeopleModal';
 import { TaskModal } from '../components/TaskModal';
@@ -470,7 +470,7 @@ export const DashboardPage: React.FC = () => {
             onClick={handleSimulateExpiry}
             disabled={isTestingAction}
           >
-            ⚡ Expiração dos 30 Dias (Simular Bloqueio)
+            ⚡ Expiração dos 30 Dias (Pagar logo)
           </button>
         </div>
       </div>

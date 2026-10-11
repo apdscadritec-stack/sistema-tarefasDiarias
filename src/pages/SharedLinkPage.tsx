@@ -1,5 +1,3 @@
-import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
 import {
   collection,
   doc,
@@ -8,6 +6,8 @@ import {
   updateDoc,
   where
 } from 'firebase/firestore';
+import React, { useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { db } from '../config/firebase';
 import { LinkAccessData, useAuth, UserLink } from '../context/AuthContext';
 
@@ -19,6 +19,7 @@ interface Task {
   icon?: string;
   linkId?: string;
   linkName?: string;
+  message?: string;
   status: 'Aguardando' | 'Concluida';
 }
 
@@ -39,6 +40,46 @@ export const SharedLinkPage: React.FC = () => {
 
     let unsubscribeTasks: (() => void) | null = null;
     let unsubscribeLinkAccess: (() => void) | null = null;
+    let isActive = true;
+    let isDeviceBlocked = false;
+
+    const stopWatchingTasks = () => {
+      unsubscribeTasks?.();
+      unsubscribeTasks = null;
+      setTasks([]);
+    };
+
+    const watchTasks = (uid: string, linkId: string) => {
+      if (unsubscribeTasks) return;
+
+      const tasksRef = collection(db, 'users', uid, 'tasks');
+      const q = query(
+        tasksRef,
+        where('linkCode', '==', code),
+        where('linkId', '==', linkId)
+      );
+
+      unsubscribeTasks = onSnapshot(q, (snapshot) => {
+        if (!isActive || isDeviceBlocked) return;
+        const loadedTasks: Task[] = snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          title: docSnap.data().title,
+          date: docSnap.data().date,
+          color: docSnap.data().color,
+          icon: docSnap.data().icon,
+          linkId: docSnap.data().linkId,
+          linkName: docSnap.data().linkName,
+          status: docSnap.data().status || (docSnap.data().completed ? 'Concluida' : 'Aguardando'),
+        }));
+        setTasks(loadedTasks);
+        setLoading(false);
+      }, (error) => {
+        if (!isActive || isDeviceBlocked) return;
+        console.error('Erro ao acompanhar tarefas do link:', error);
+        setErrorMsg('Sem permissão para acessar as tarefas deste link. Verifique as regras do Firestore.');
+        setLoading(false);
+      });
+    };
 
     const fetchOwnerAndTasks = async () => {
       setLoading(true);
@@ -46,6 +87,7 @@ export const SharedLinkPage: React.FC = () => {
 
       try {
         const result = await getTaskOwnerByLinkCode(code);
+        if (!isActive) return;
         if (!result) {
           setErrorMsg('Link não encontrado ou expirado.');
           setLoading(false);
@@ -57,6 +99,7 @@ export const SharedLinkPage: React.FC = () => {
 
         const linkAccessRef = doc(db, 'linkAccess', code);
         unsubscribeLinkAccess = onSnapshot(linkAccessRef, (linkSnap) => {
+          if (!isActive) return;
           if (!linkSnap.exists()) {
             setErrorMsg('Link não encontrado ou expirado.');
             setLoading(false);
@@ -68,6 +111,7 @@ export const SharedLinkPage: React.FC = () => {
             setLoading(false);
             return;
           }
+          setErrorMsg('');
           const updatedLink: UserLink = {
             id: data.linkId,
             code: code,
@@ -75,46 +119,31 @@ export const SharedLinkPage: React.FC = () => {
             assignedPersonName: typeof data.assignedPersonName === 'string' ? data.assignedPersonName : '',
             logo: typeof data.logo === 'string' ? data.logo : '🏢',
             isDeviceBlocked: data.isDeviceBlocked === true,
+            message: typeof data.message === 'string' ? data.message : '',
           };
+          isDeviceBlocked = updatedLink.isDeviceBlocked === true;
           setOwnerData({
             uid: data.uid,
             ownerName: typeof data.ownerName === 'string' ? data.ownerName : 'Usuário',
             targetLink: updatedLink,
           });
           setTargetLink(updatedLink);
+
+          if (updatedLink.isDeviceBlocked) {
+            stopWatchingTasks();
+            setLoading(false);
+          } else {
+            setLoading(true);
+            watchTasks(result.uid, result.targetLink.id);
+          }
         }, (error) => {
+          if (!isActive) return;
           console.error('Erro ao acompanhar o link compartilhado:', error);
           setErrorMsg('Sem permissão para acessar este link. Verifique as regras do Firestore.');
           setLoading(false);
         });
-
-        // Listen for tasks assigned to this linkId
-        const tasksRef = collection(db, 'users', result.uid, 'tasks');
-        const q = query(
-          tasksRef,
-          where('linkCode', '==', code),
-          where('linkId', '==', result.targetLink.id)
-        );
-
-        unsubscribeTasks = onSnapshot(q, (snapshot) => {
-          const loadedTasks: Task[] = snapshot.docs.map((docSnap) => ({
-            id: docSnap.id,
-            title: docSnap.data().title,
-            date: docSnap.data().date,
-            color: docSnap.data().color,
-            icon: docSnap.data().icon,
-            linkId: docSnap.data().linkId,
-            linkName: docSnap.data().linkName,
-            status: docSnap.data().status || (docSnap.data().completed ? 'Concluida' : 'Aguardando'),
-          }));
-          setTasks(loadedTasks);
-          setLoading(false);
-        }, (error) => {
-          console.error('Erro ao acompanhar tarefas do link:', error);
-          setErrorMsg('Sem permissão para acessar as tarefas deste link. Verifique as regras do Firestore.');
-          setLoading(false);
-        });
       } catch (err) {
+        if (!isActive) return;
         console.error('Erro ao carregar link:', err);
         setErrorMsg(
           err instanceof Error && 'code' in err && err.code === 'permission-denied'
@@ -128,6 +157,7 @@ export const SharedLinkPage: React.FC = () => {
     fetchOwnerAndTasks();
 
     return () => {
+      isActive = false;
       if (unsubscribeTasks) unsubscribeTasks();
       if (unsubscribeLinkAccess) unsubscribeLinkAccess();
     };
@@ -222,18 +252,27 @@ export const SharedLinkPage: React.FC = () => {
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
         <div className="bg-slate-800 rounded-3xl p-8 text-center border border-slate-700 max-w-md w-full shadow-2xl">
           <span className="text-6xl mb-4 block">🔒</span>
-          <h2 className="text-2xl font-bold text-slate-50 mb-3">Celular Bloqueado</h2>
+          <h2 className="text-2xl font-bold text-slate-50 mb-3">Aparelho Bloqueado</h2>
           <p className="text-sm text-slate-400 leading-relaxed mb-6">
-            Este celular foi bloqueado através do sistema por possuir tarefas pendentes.
+            O acesso às tarefas deste link foi bloqueado por haver tarefas pendentes. Isso não bloqueia o aparelho fora do aplicativo.
           </p>
           <div className="bg-slate-900 rounded-2xl p-4 text-center border border-slate-700 space-y-2">
-            <p className="text-blue-400 text-xs font-bold">
-              📊 Progresso Atual das Tarefas: {completionRate.toFixed(0)}% concluídas ({completedCount}/{totalTasks})
-            </p>
+            {targetLink.message ? (
+              <p className="text-sm text-slate-100 leading-relaxed whitespace-pre-wrap break-words">
+                {targetLink.message}
+              </p>
+            ) : null}
             <p className="text-slate-500 text-xs">
-              O bloqueio só pode ser removido pelo aplicativo principal.
+              Para desbloquear, entre com o e-mail e a senha da conta proprietária e remova o bloqueio no aplicativo.
             </p>
           </div>
+          <button
+            type="button"
+            className="w-full mt-5 bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-3 rounded-xl transition-colors"
+            onClick={handleLoginAsOwner}
+          >
+            Entrar para desbloquear
+          </button>
         </div>
       </div>
     );
@@ -268,9 +307,20 @@ export const SharedLinkPage: React.FC = () => {
             onClick={handleLockDevice}
             disabled={isBlockingAction}
           >
-            🔒 Bloquear Celular
+            🔒 Bloquear Aparelho
           </button>
         </div>
+
+        {targetLink.message ? (
+          <section
+            aria-label="Mensagem"
+            className="bg-blue-50 dark:bg-blue-950/40 rounded-2xl p-4 border border-blue-200 dark:border-blue-900 shadow-sm"
+          >
+            <p className="text-sm font-semibold text-blue-900 dark:text-blue-200 leading-relaxed whitespace-pre-wrap break-words">
+              {targetLink.message}
+            </p>
+          </section>
+        ) : null}
 
         {/* Progress & Validation Stats Bar */}
         <div className="bg-white dark:bg-slate-800 rounded-2xl p-3.5 border border-slate-200 dark:border-slate-700 shadow-sm space-y-2">

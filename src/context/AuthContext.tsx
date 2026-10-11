@@ -38,6 +38,7 @@ export interface UserLink {
   assignedPersonName?: string;
   logo?: string;
   isDeviceBlocked?: boolean;
+  message?: string;
 }
 
 export interface UserData {
@@ -77,6 +78,7 @@ interface AuthContextType {
   updatePerson: (personId: string, fullName: string, birthDate: string, gender: 'Masculino' | 'Feminino') => Promise<void>;
   deletePerson: (personId: string) => Promise<void>;
   updateLinkDetails: (linkId: string, name: string, assignedPersonId: string, assignedPersonName: string, logo: string) => Promise<void>;
+  sendLinkMessage: (linkCode: string, message: string) => Promise<void>;
   toggleDeviceBlock: (linkCode: string, blockState: boolean) => Promise<void>;
   getTaskOwnerByLinkCode: (linkCode: string) => Promise<LinkAccessData | null>;
 }
@@ -97,6 +99,7 @@ const syncLinkAccessDocuments = async (userData: UserData) => {
   await Promise.all(userData.userLinks.map(async (link) => {
     const linkDocRef = doc(db, 'linkAccess', link.code);
     const existingLink = await getDoc(linkDocRef);
+    const existingData = existingLink.exists() ? existingLink.data() : undefined;
     await setDoc(linkDocRef, {
       uid: userData.uid,
       ownerName: userData.name || 'Usuário',
@@ -105,8 +108,11 @@ const syncLinkAccessDocuments = async (userData: UserData) => {
       linkName: link.name,
       assignedPersonName: link.assignedPersonName || '',
       logo: link.logo || '🏢',
-      isDeviceBlocked: existingLink.exists()
-        ? existingLink.data().isDeviceBlocked === true
+      message: typeof existingData?.message === 'string'
+        ? existingData.message
+        : link.message || '',
+      isDeviceBlocked: existingData
+        ? existingData.isDeviceBlocked === true
         : link.isDeviceBlocked === true,
     });
   }));
@@ -385,6 +391,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
+  const sendLinkMessage = async (linkCode: string, message: string) => {
+    await updateDoc(doc(db, 'linkAccess', linkCode), { message });
+  };
+
   const getTaskOwnerByLinkCode = async (linkCode: string) => {
     const normalizedCode = normalizeLinkCode(linkCode);
     if (!normalizedCode) return null;
@@ -411,6 +421,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         assignedPersonName: typeof data.assignedPersonName === 'string' ? data.assignedPersonName : '',
         logo: typeof data.logo === 'string' ? data.logo : '🏢',
         isDeviceBlocked: data.isDeviceBlocked === true,
+        message: typeof data.message === 'string' ? data.message : '',
       },
     };
   };
@@ -436,6 +447,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updatePerson,
         deletePerson,
         updateLinkDetails,
+        sendLinkMessage,
         toggleDeviceBlock,
         getTaskOwnerByLinkCode,
       }}
