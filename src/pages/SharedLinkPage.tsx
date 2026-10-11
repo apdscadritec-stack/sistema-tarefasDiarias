@@ -15,11 +15,7 @@ interface Task {
   id: string;
   title: string;
   date: string;
-  color?: string;
   icon?: string;
-  linkId?: string;
-  linkName?: string;
-  message?: string;
   status: 'Aguardando' | 'Concluida';
 }
 
@@ -65,10 +61,7 @@ export const SharedLinkPage: React.FC = () => {
           id: docSnap.id,
           title: docSnap.data().title,
           date: docSnap.data().date,
-          color: docSnap.data().color,
           icon: docSnap.data().icon,
-          linkId: docSnap.data().linkId,
-          linkName: docSnap.data().linkName,
           status: docSnap.data().status || (docSnap.data().completed ? 'Concluida' : 'Aguardando'),
         }));
         setTasks(loadedTasks);
@@ -117,7 +110,7 @@ export const SharedLinkPage: React.FC = () => {
             code: code,
             name: typeof data.linkName === 'string' ? data.linkName : 'Link',
             assignedPersonName: typeof data.assignedPersonName === 'string' ? data.assignedPersonName : '',
-            logo: typeof data.logo === 'string' ? data.logo : '🏢',
+            logo: typeof data.logo === 'string' ? data.logo : '😊',
             isDeviceBlocked: data.isDeviceBlocked === true,
             message: typeof data.message === 'string' ? data.message : '',
           };
@@ -192,7 +185,7 @@ export const SharedLinkPage: React.FC = () => {
     // Rule Check: If 75% or more of tasks are completed, blocking is NOT allowed!
     if (completionRate >= 75) {
       alert(
-        `Bloqueio Não Permitido 🚫\nNão é possível realizar o bloqueio do celular pois ${completionRate.toFixed(0)}% das tarefas já estão concluídas (máximo permitido para bloqueio: < 75%).`
+        `Bloqueio Não Permitido 🚫\nNão é possível realizar o bloqueio, pois ${completionRate.toFixed(0)}% das tarefas já estão concluídas (máximo permitido para bloqueio: < 75%).`
       );
       return;
     }
@@ -205,10 +198,10 @@ export const SharedLinkPage: React.FC = () => {
     setIsBlockingAction(true);
     try {
       await toggleDeviceBlock(targetLink.code, true);
-      alert('Dispositivo Bloqueado 🔒\nO celular foi bloqueado com sucesso.');
+      alert('Dispositivo Bloqueado 🔒\nO bloqueado com sucesso.');
     } catch (err) {
       console.error('Erro ao bloquear dispositivo:', err);
-      alert('Não foi possível efetuar o bloqueio do celular.');
+      alert('Não foi possível efetuar o bloqueio.');
     } finally {
       setIsBlockingAction(false);
     }
@@ -263,7 +256,7 @@ export const SharedLinkPage: React.FC = () => {
               </p>
             ) : null}
             <p className="text-slate-500 text-xs">
-              Para desbloquear, entre com o e-mail e a senha da conta proprietária e remova o bloqueio no aplicativo.
+              Para desbloquear, entre com o e-mail e a senha da conta proprietária e remova o bloqueio.
             </p>
           </div>
           <button
@@ -284,7 +277,7 @@ export const SharedLinkPage: React.FC = () => {
         {/* Header with Logo, Assigned Person & Lock Button */}
         <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 border border-slate-200 dark:border-slate-700 flex justify-between items-center shadow-sm">
           <div className="flex items-center gap-3 flex-1 overflow-hidden">
-            <span className="text-3xl shrink-0">{targetLink.logo || '🏢'}</span>
+            <span className="text-3xl shrink-0">{targetLink.logo || '😊'}</span>
             <div className="flex-1 min-w-0">
               <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 truncate">{targetLink.name}</h2>
               {targetLink.assignedPersonName ? (
@@ -388,66 +381,6 @@ export const SharedLinkPage: React.FC = () => {
           )}
         </section>
 
-        <div className="pt-1">
-          <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">
-            Tarefas Atribuídas ({tasks.length})
-          </h3>
-        </div>
-
-        {/* Task List */}
-        <div className="space-y-3 pb-6">
-          {tasks.map((item) => {
-            const cardBg = item.color || '#3B82F6';
-            const isCompleted = item.status === 'Concluida';
-
-            return (
-              <div
-                key={item.id}
-                className="bg-white dark:bg-slate-800 rounded-2xl p-4 border-l-[6px] border border-slate-200 dark:border-slate-700 shadow-sm space-y-3"
-                style={{ borderLeftColor: cardBg }}
-              >
-                <div className="flex items-start gap-3">
-                  <span className="text-3xl">{item.icon || '📝'}</span>
-                  <div className="flex-1 min-w-0">
-                    <h4 className={`text-base font-bold ${isCompleted ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-slate-100'}`}>
-                      {item.title}
-                    </h4>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">📅 Data: {item.date}</p>
-                  </div>
-                </div>
-
-                <div className="flex justify-between items-center pt-2 border-t border-slate-100 dark:border-slate-700">
-                  <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${
-                    isCompleted
-                      ? 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400'
-                      : 'bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400'
-                  }`}>
-                    {isCompleted ? '✓ Concluída' : '⏳ Aguardando'}
-                  </span>
-
-                  <button
-                    type="button"
-                    className={`px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-                      isCompleted
-                        ? 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300'
-                        : 'bg-green-600 hover:bg-green-700 text-white shadow-sm'
-                    }`}
-                    onClick={() => handleToggleTaskStatus(item)}
-                  >
-                    {isCompleted ? 'Marcar como Aguardando' : '✓ Marcar Concluída'}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-
-          {tasks.length === 0 ? (
-            <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 text-center border border-slate-200 dark:border-slate-700">
-              <span className="text-4xl mb-2 block">📭</span>
-              <p className="text-sm text-slate-400">Nenhuma tarefa atribuída a este link.</p>
-            </div>
-          ) : null}
-        </div>
       </div>
     </div>
   );

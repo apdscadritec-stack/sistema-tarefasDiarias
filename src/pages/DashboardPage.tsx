@@ -403,7 +403,7 @@ export const DashboardPage: React.FC = () => {
                     <div className="flex items-center gap-2 flex-wrap">
                       <div className="px-2 py-0.5 rounded-md" style={{ backgroundColor: colors.inputBg }}>
                         <span className="text-[11px] font-semibold" style={{ color: colors.textSecondary }}>
-                          {assignedLink?.logo || '🏢'} {item.linkName}
+                          {assignedLink?.logo || '😊'} {item.linkName}
                           {assignedLink?.assignedPersonName ? ` (${assignedLink.assignedPersonName})` : ''}
                         </span>
                       </div>
